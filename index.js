@@ -235,15 +235,15 @@ const handleUdpError = (err) => {
 };
 
 function handleWsClose(e) {
-  console.log('handleWsClose()', e.target.id);
+  console.log('handleWsClose()');
 }
 
 function handleWsError(e) {
-  console.log('handleWsError()', e.target.id);
+  console.log('handleWsError()');
 }
 
 function handleWsMessage(e) {
-  console.log('handleWsMessage()', e.target.id);
+  console.log('handleWsMessage()');
 
   const { type, ...data } = JSON.parse(e.data);
 
