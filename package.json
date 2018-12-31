@@ -1,0 +1,21 @@
+{
+  "name": "webrtc-relay-node",
+  "version": "0.0.1",
+  "description": "NodeJS implementation of a WebRTC relay server",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "author": "Aravindan Ve <aravindan.ve@outlook.com>",
+  "license": "MIT",
+  "dependencies": {
+    "hexy": "^0.3.0",
+    "saslprep": "^1.0.2",
+    "sdp-transform": "^2.7.0",
+    "sshpk": "^1.16.0",
+    "ws": "^6.1.2"
+  },
+  "devDependencies": {
+    "nodemon": "^1.18.9"
+  }
+}

@@ -1,0 +1,177 @@
+<script>
+  const ws = new WebSocket('ws://localhost:9000');
+  const pc = new RTCPeerConnection();
+
+  let localStream;
+  let peerConnection;
+
+  function destroy() {
+    if (localStream) {
+      const tracks = localStream.getTracks();
+
+      for (let i = 0; i < tracks.length; i++) {
+        tracks[i].stop();
+      }
+
+      localStream = undefined;
+    }
+
+    if (peerConnection) {
+      peerConnection.close();
+      peerConnection = undefined;
+    }
+  }
+
+  function handleWsOpen(e) {
+    console.log('handleWsOpen()', e);
+  }
+
+  function handleWsClose(e) {
+    console.log('handleWsClose()', e);
+  }
+
+  function handleWsError(e) {
+    console.log('handleWsError()', e);
+  }
+
+  function handleWsMessage(e) {
+    console.log('handleWsMessage()', e);
+
+    const data = JSON.parse(e.data);
+
+    switch (data.type) {
+      case 'answer':
+        handleRemoteAnswer(data);
+        break;
+
+      default:
+        console.warn(`Unknown message ${data.type}`);
+        break;
+    }
+  }
+
+  function handleUserMedia(stream) {
+    console.log('handleUserMedia()', stream);
+
+    localStream = stream;
+    peerConnection = new RTCPeerConnection();
+
+    // add listeners
+    peerConnection.onconnectionstatechange = handlePcConnectionStateChange;
+    peerConnection.onicecandidate = handlePcIceCandidate;
+    peerConnection.onicecandidateerror = handlePcIceCandidateError;
+    peerConnection.oniceconnectionstatechange = handlePcIceConnectionStateChange;
+    peerConnection.onicegatheringstatechange = handlePcIceGatheringStateChange;
+    peerConnection.onnegotiationneeded = handlePcNegotiationNeeded;
+    peerConnection.onsignalingstatechange = handlePcSignalingStateChange;
+    peerConnection.ontrack = handlePcTrack;
+
+    // add tracks
+    const tracks = stream.getTracks();
+    for (let i = 0; i < tracks.length; i++) {
+      peerConnection.addTrack(tracks[i], localStream);
+    }
+
+    // create offer
+    peerConnection.createOffer()
+      .then(handleLocalOffer)
+      .catch(handleLocalOfferError);
+  }
+
+  function handleUserMediaError(err) {
+    console.error('UserMediaError', err);
+  }
+
+  function handleLocalOffer(offer) {
+    console.log('handleLocalOffer()', offer);
+
+    peerConnection.setLocalDescription(offer)
+      .then(handleLocalDescription)
+      .catch(handleLocalDescriptionError);
+  }
+
+  function handleLocalOfferError(err) {
+    console.error('LocalOfferError', err);
+  }
+
+  function handleLocalDescription() {
+    console.log('handleLocalDescription()');
+
+    ws.send(JSON.stringify({
+      type: 'offer',
+      sdp: peerConnection.localDescription.sdp
+    }));
+  }
+
+  function handleLocalDescriptionError(err) {
+    console.error('LocalDescriptionError', err);
+  }
+
+  function handleRemoteAnswer(answer) {
+    console.log('handleRemoteAnswer()', answer);
+
+    peerConnection.setRemoteDescription(answer)
+      .then(handleRemoteDescription)
+      .catch(handleRemoteDescriptionError);
+  }
+
+  function handleRemoteDescription() {
+    console.log('handleRemoteDescription()');
+  }
+
+  function handleRemoteDescriptionError(err) {
+    console.error('RemoteDescriptionError', err);
+  }
+
+  function handlePcConnectionStateChange(e) {
+    console.log('handlePcConnectionStateChange()', e);
+  }
+
+  function handlePcIceCandidate(e) {
+    console.log('handlePcIceCandidate()', e);
+
+    ws.send(JSON.stringify({
+      type: 'candidate',
+      ...e.candidate ? {
+        candidate: e.candidate.candidate,
+        sdpMid: e.candidate.sdpMid,
+        sdpMLineIndex: e.candidate.sdpMLineIndex
+
+        } : {}
+    }));
+  }
+
+  function handlePcIceCandidateError(e) {
+    console.log('handlePcIceCandidateError()', e);
+  }
+
+  function handlePcIceConnectionStateChange(e) {
+    console.log('handlePcIceConnectionStateChange()', e);
+  }
+
+  function handlePcIceGatheringStateChange(e) {
+    console.log('handlePcIceGatheringStateChange()', e);
+  }
+
+  function handlePcNegotiationNeeded(e) {
+    console.log('handlePcNegotiationNeeded()', e);
+  }
+
+  function handlePcSignalingStateChange(e) {
+    console.log('handlePcSignalingStateChange()', e);
+  }
+
+  function handlePcTrack(e) {
+    console.log('handlePcTrack()', e);
+  }
+
+  ws.onopen = handleWsOpen;
+  ws.onclose = handleWsClose;
+  ws.onerror = handleWsError;
+  ws.onmessage = handleWsMessage;
+
+  navigator.mediaDevices
+    .getUserMedia({ audio: true, video: true })
+    .then(handleUserMedia)
+    .catch(handleUserMediaError);
+</script>
