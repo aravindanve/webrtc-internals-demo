@@ -2,6 +2,7 @@ v=0
 o=- a 1 IN IP4 {HOST}
 s=-
 t=0 0
+a=ice-lite
 a=msid-semantic: WMS
 a=group:BUNDLE audio video
 m=audio {PORT} UDP/TLS/RTP/SAVPF 111
