@@ -1,0 +1,43 @@
+<script>
+const pc = new RTCPeerConnection();
+const ws = new WebSocket('ws://localhost:9000');
+
+ws.onclose = () => console.log('ws/close');
+ws.onerror = err => console.log('ws/error', err);
+ws.onopen = () => {
+  console.log('ws/open');
+  ws.send(JSON.stringify({ type: 'consumer' }));
+};
+
+ws.onmessage = e => {
+  console.log('ws/message', e);
+  const data = JSON.parse(e.data);
+
+  switch (data.type) {
+    case 'offer':
+      pc.setRemoteDescription(data)
+        .then(() => pc.createAnswer())
+        .then(answer => {
+          ws.send(JSON.stringify(answer));
+          pc.onicecandidate = e => e.candidate && ws.send(JSON.stringify({
+            type: 'candidate',
+            candidate: e.candidate.candidate,
+            sdpMNLineIndex: e.candidate.sdpMLineIndex,
+            sdpMid: e.candidate.sdpMid
+          }));
+          return pc.setLocalDescription(answer);
+        })
+        .catch(err => console.error(err));
+      break;
+
+    case 'candidate':
+      pc.addIceCandidate(data);
+      break;
+
+    default:
+      console.log('Invalid message', data);
+      break;
+  }
+};
+
+</script>
