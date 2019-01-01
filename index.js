@@ -114,9 +114,7 @@ const prettyPrintStunPacket = (buf, computedHash) => {
   console.log(`Message-Length: ${buf.readUInt16BE(2, 4)}`);
   console.log(`Magic-Cookie: 0x${buf.readUInt32BE(4, 8).toString(16)}`);
   console.log(`Transaction-ID: ${buf.slice(8, 20).toString('base64')}`);
-  console.log('\n');
-  console.log(hexy.hexy(attrs, config.hexyFormat));
-  console.log('\n');
+  console.log('\n' + hexy.hexy(attrs, config.hexyFormat));
 
   let offset = 20;
 
@@ -140,7 +138,7 @@ const prettyPrintStunPacket = (buf, computedHash) => {
   }
 
   if (computedHash) {
-    console.log(`\nCOMPUTED-INTEGRITY`, computedHash);
+    console.log(`+++COMPUTED-INTEGRITY`, computedHash);
   }
 
   console.log('\n---');
@@ -204,13 +202,11 @@ const handleStunRequest = (req, rinfo) => {
 
     udpSocket.send(req, rinfo.port, rinfo.address); // fix
 
-    console.log('SUCCESS');
-    console.log('-'.repeat(6));
+    console.log('\nSUCCESS:');
     prettyPrintStunPacket(req, computedHash);
 
   } catch (err) {
-    console.log('ERROR:', err);
-    console.log('-'.repeat(6));
+    console.log('\nERROR:', err);
     prettyPrintStunPacket(req);
   }
 };
