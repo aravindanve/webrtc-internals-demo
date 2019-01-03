@@ -1,12 +1,12 @@
 v=0
-o=- a 1 IN IP4 {HOST}
+o=- a 1 IN IP4 {ADDRESS}
 s=-
 t=0 0
 a=ice-lite
 a=msid-semantic: WMS
 a=group:BUNDLE audio video
 m=audio {PORT} UDP/TLS/RTP/SAVPF 111
-c=IN IP4 {HOST}
+c=IN IP4 {ADDRESS}
 a=ice-ufrag:{ICE_UFRAG}
 a=ice-pwd:{ICE_PWD}
 a=fingerprint:sha-256 {CERT_FINGERPRINT}
@@ -18,9 +18,9 @@ a=rtcp-mux
 a=rtpmap:111 opus/48000/2
 a=rtcp-fb:111 transport-cc
 a=fmtp:111 minptime=10;useinbandfec=1
-a=candidate:0 1 udp 2130706431 {HOST} {PORT} typ host generation 0
+a=candidate:0 1 udp 2130706431 {ADDRESS} {PORT} typ host generation 0
 m=video {PORT} UDP/TLS/RTP/SAVPF 96 97 100 101
-c=IN IP4 {HOST}
+c=IN IP4 {ADDRESS}
 a=ice-ufrag:{ICE_UFRAG}
 a=ice-pwd:{ICE_PWD}
 a=fingerprint:sha-256 {CERT_FINGERPRINT}
@@ -54,4 +54,4 @@ a=rtcp-fb:100 nack pli
 a=fmtp:100 level-asymmetry-allowed=1;packetization-mode=1;profile-level-id=42001f
 a=rtpmap:101 rtx/90000
 a=fmtp:101 apt=100
-a=candidate:0 1 udp 2130706431 {HOST} {PORT} typ host generation 0
+a=candidate:0 1 udp 2130706431 {ADDRESS} {PORT} typ host generation 0

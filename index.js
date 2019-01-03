@@ -8,6 +8,7 @@ const SdpTransform = require('sdp-transform');
 const saslprep = require('saslprep');
 const hexy = require('hexy');
 const config = require('./config');
+const stun = require('./stun');
 const udpSocket = dgram.createSocket('udp4');
 const wss = new WebSocket(config.wssOptions);
 const tlsCert = fs.readFileSync(path.resolve(config.tlsCertFile));
@@ -20,15 +21,15 @@ const certFingerprint = sshpk
 
 const sdpTemplate = fs.readFileSync(path.resolve(config.sdpTemplateFile))
   .toString()
-  .replace(/{HOST}/g, config.rtpOptions.host)
+  .replace(/{ADDRESS}/g, config.rtpOptions.address)
   .replace(/{PORT}/g, config.rtpOptions.port)
   .replace(/{CERT_FINGERPRINT}/g, certFingerprint);
 
 let producer;
 let producerSession;
 let producerMedia;
-let producerMediaBySdpMid;
-let producerMediaByUfrag;
+let producerMediaBySdpMid = {};
+let producerMediaByUfrag = {};
 let localIceUfrag;
 let localIcePwd;
 let localIceKey;
@@ -42,7 +43,7 @@ const generateSdp = (ufrag, pwd) => {
 };
 
 const setProducerDescription = sdp => {
-  console.log('setProducerDescription()');
+  console.log('setProducerDescription()', sdp);
 
   const { media, ...session } = SdpTransform.parse(sdp);
 
@@ -60,7 +61,7 @@ const setProducerDescription = sdp => {
   }
 
   localIceUfrag = crypto.randomBytes(3).toString('base64');
-  localIcePwd = crypto.randomBytes(16).toString('base64');
+  localIcePwd = crypto.randomBytes(18).toString('base64');
   localIceKey = saslprep(localIcePwd);
 
   const localDescription = generateSdp(localIceUfrag, localIcePwd);
@@ -76,177 +77,184 @@ const setProducerDescription = sdp => {
 const addProducerCandidate = (candidate, sdpMid, sdpMLineIndex) => {
   console.log('addProducerCandidate()');
 
-  if (!(candidate && candidate.candidate)) return;
+  if (!candidate) return;
 
-  const parsed = SdpTransform.parse(`a=${candidate}`);
+  const { candidates: [parsed] } = SdpTransform.parse(`a=${candidate}`);
 
   if (sdpMLineIndex && producerMedia[sdpMLineIndex]) {
+    console.log('sdpMLineIndex matched for candidate', sdpMLineIndex, parsed);
     producerMedia[sdpMLineIndex].candidates.push(parsed);
 
   } else if (sdpMid && producerMediaBySdpMid[sdpMid]) {
+    console.log('sdpMid matched for candidate', sdpMid, parsed);
     producerMediaBySdpMid[sdpMid].candidates.push(parsed);
 
   } else {
     // do nothing
+    console.log('No sdpMid or sdpMid matched for candidate', parsed);
   }
 };
 
-const stunAttributeType = {
-  [0x0006]: ['USERNAME', buf => buf.toString()],
-  [0x0008]: ['MESSAGE-INTEGRITY', buf => buf.toString('hex')],
-  [0x0009]: ['ERROR-CODE', buf => buf.toString()],
-  [0x0024]: ['PRIORITY', buf => buf.readUInt32BE()],
-  [0x0025]: ['USE-CANDIDATE', buf => buf.toString()],
-  [0x8028]: ['FINGERPRINT', buf => buf.toString('hex')],
-  [0x8029]: ['ICE-CONTROLLED', buf => buf.readUInt32BE()],
-  [0x802a]: ['ICE-CONTROLLING', buf => buf.readUInt32BE()]
-};
+const prettyStunMsg = [];
+prettyStunMsg[stun.MessageType16.BINDING_REQUEST] = 'Binding Request';
+prettyStunMsg[stun.MessageType16.BINDING_SUCCESS_RESPONSE] = 'Binding Success Response';
+prettyStunMsg[stun.MessageType16.BINDING_ERROR_RESPONSE] = 'Binding Error Response';
 
-const prettyPrintStunPacket = (buf, computedHash) => {
-  const first16bits = buf[0].toString(2).padStart(8, 0)
-    + buf[1].toString(2).padStart(8, 0);
+const prettyStunAttr = [];
+prettyStunAttr[stun.AttributeType16.USERNAME] = {
+  label: 'USERNAME', format: value => value.toString() };
+prettyStunAttr[stun.AttributeType16.MESSAGE_INTEGRITY] = {
+  label: 'MESSAGE-INTEGRITY', format: value => `0x${value.toString('hex')}` };
+prettyStunAttr[stun.AttributeType16.ERROR_CODE] = {
+  label: 'ERROR-CODE', format: value => value.toString() };
+prettyStunAttr[stun.AttributeType16.UNKNOWN_ATTRIBUTES] = {
+  label: 'UNKNOWN-ATTRIBUTES', format: value => value };
+prettyStunAttr[stun.AttributeType16.XOR_MAPPED_ADDRESS] = {
+  label: 'XOR-MAPPED-ADDRESS', format: value => `${[...value.slice(4)].join('.')}:${value.readUInt16BE(2)}` };
+prettyStunAttr[stun.AttributeType16.PRIORITY] = {
+  label: 'PRIORITY', format: value => value.readUInt32BE() };
+prettyStunAttr[stun.AttributeType16.USE_CANDIDATE] = {
+  label: 'USE-CANDIDATE', format: value => `0x${value.toString('hex')}` };
+prettyStunAttr[stun.AttributeType16.FINGERPRINT] = {
+  label: 'FINGERPRINT', format: value => `0x${value.toString('hex')}` };
+prettyStunAttr[stun.AttributeType16.ICE_CONTROLLED] = {
+  label: 'ICE-CONTROLLED', format: value => `0x${value.toString('hex')}` };
+prettyStunAttr[stun.AttributeType16.ICE_CONTROLLING] = {
+  label: 'ICE-CONTROLLING', format: value => `0x${value.toString('hex')}` };
 
-  const attrs = buf.slice(20);
-
-  console.log('\nSTUN Packet:');
-  console.log(`Zero-Bits: 0b${first16bits.slice(0, 2)}`);
-  console.log(`Message-Type: 0b${first16bits.slice(2, 16)}`);
-  console.log(`Message-Length: ${buf.readUInt16BE(2, 4)}`);
-  console.log(`Magic-Cookie: 0x${buf.readUInt32BE(4, 8).toString(16)}`);
-  console.log(`Transaction-ID: ${buf.slice(8, 20).toString('base64')}`);
-  console.log('\n' + hexy.hexy(attrs, config.hexyFormat));
-
-  let offset = 20;
-
-  while (offset < buf.length) {
-    const type = '' + buf.readUInt16BE(offset, offset += 2);
-    const length = buf.readUInt16BE(offset, offset += 2);
-    const value = buf.slice(offset, offset += length);
-    const rem = length % 4;
-
-    // offset padding
-    if (rem) offset += 4 - rem;
-
-    if (stunAttributeType[type]) {
-      console.log(
-        stunAttributeType[type][0],
-        stunAttributeType[type][1](value));
-
-    } else {
-      console.log(`UNKNOWN (0x${(+type).toString(16)})`, value);
-    }
-  }
-
-  if (computedHash) {
-    console.log(`+++COMPUTED-INTEGRITY`, computedHash);
-  }
-
-  console.log('\n---');
-};
-
-const handleStunRequest = (req, rinfo) => {
-  console.log('handleStunRequest()', rinfo);
-
-  let offset = 20;
-  let ufrag; // [local, remote]
-  let ipos;
-  let ihash;
+const prettyPrintStunPacket = (msg, rinfo) => {
+  const packet = new stun.ReadablePacket(msg);
 
   try {
-    while (offset < req.length) {
-      const type = req.readUInt16BE(offset, offset += 2);
-      const length = req.readUInt16BE(offset, offset += 2);
-      const value = req.slice(offset, offset += length);
-      const rem = length % 4;
+    console.log('STUN Packet:');
+    console.log('-'.repeat(30));
+    console.log('addr:', rinfo.address);
+    console.log('port:', rinfo.port);
+    console.log(
+      'MESSAGE-TYPE',
+      prettyStunMsg[packet.messageType16] ||
+        `0x${packet.messageType16.toString(16)}`);
+    console.log(
+      'MAGIC-COOKIE', `0x${packet.cookie32.toString(16)}`);
+    console.log(
+      'TRANSACTION-ID', `0x${packet.transactionIdX}`);
 
-      // offset padding
-      if (rem) offset += 4 - rem;
+    for (const { type, offset, length } of packet.attributes()) {
+      if (prettyStunAttr[type]) {
+        console.log(
+          prettyStunAttr[type].label,
+          prettyStunAttr[type].format(
+            msg.slice(offset, offset + length)));
 
+      } else {
+        console.log(
+          `UNKNOWN (0x${type.toString(16)})`,
+          `0x${msg.slice(offset, offset + length).toString('hex')}`);
+      }
+    }
+    console.log('-'.repeat(30));
+
+    for (const { type } of packet.attributes()) {
+      if (type === stun.AttributeType16.USE_CANDIDATE) {
+        process.exit(0); // fix
+      }
+    }
+
+  } catch (err) {
+    console.log('ERROR pretty printing packet', err);
+    console.log(hexy.hexy(msg, config.hexyFormat));
+  }
+};
+
+const handleStunBindingRequest = (msg, rinfo) => {
+  console.log('handleStunBindingRequest()', rinfo.port, rinfo.address);
+
+  // debug
+  console.log('L -> R ', '='.repeat(23));
+  prettyPrintStunPacket(msg, rinfo);
+
+  const packet = new stun.ReadablePacket(msg);
+
+  let ufrag; // `local:remote`
+  let hashOffset;
+
+  try {
+    for (const {type, offset, length} of packet.attributes()) {
       switch (type) {
-        case 0x0006:
-          ufrag = value.toString().split(':');
+        case stun.AttributeType16.USERNAME:
+          ufrag = msg.slice(offset, offset + length).toString().split(':');
           break;
 
-        case 0x0008:
-          ipos = offset - 24; // tl(4) + hash(20)
-          ihash = value.toString('hex');
-          break;
-
-        default:
+        case stun.AttributeType16.MESSAGE_INTEGRITY:
+          hashOffset = offset;
           break;
       }
     }
 
     // check username and message-integrity attribute set
-    if (!(ufrag && ipos)) {
+    if (!ufrag || !hashOffset) {
       throw 400;
     }
 
-    // validate message integrity
-    const ireq = req.slice(0, ipos);
-    const ilen = new Buffer(2);
-
-    ilen.writeUInt16BE(ipos + 4); // ipos + tl(4) + hash(20) - header(20)
-
-    // sub message length without fingerprint attribute
-    ireq[2] = ilen[0];
-    ireq[3] = ilen[1];
-
-    const computedHash = crypto
-      .createHmac('sha1', localIceKey)
-      .update(ireq)
-      .digest('hex');
-
-    // validate message integrity
-    if (computedHash !== ihash) {
+    // validate remote ufrag
+    if (!producerMediaByUfrag[ufrag[1]]) {
       throw 401;
     }
 
-    console.log('\nREQUEST:');
-    prettyPrintStunPacket(req, computedHash);
+    // validate message integrity
+    if (!localIceKey || !stun.checkMessageIntegrity(msg, localIceKey, hashOffset)) {
+      throw 401;
+    }
 
-    // const resh = req.slice(0, 20);
+    // create binding success response
+    const config = { key: localIceKey };
+    console.log('HERE1', localIceKey, producerMediaByUfrag[ufrag[1]].iceKey);
+    const res = stun.createBindingSuccessResponse(msg, config, rinfo);
 
-    // // format response
-    // resh[0] = 0x01; resh[1] = 0x01;     // response type
-    // resh.writeUInt32BE(0x2112a442, 4); // magic cookie
+    // send binding success response
+    udpSocket.send(res, rinfo.port, rinfo.address);
 
-    // console.log('\nRESPONSE:');
-    // prettyPrintStunPacket(res);
-
-    udpSocket.send(res, rinfo.port, rinfo.address); // fix
+    // debug
+    console.log('L <- R ', '='.repeat(23));
+    prettyPrintStunPacket(res, rinfo);
 
   } catch (err) {
-    console.log('\nERROR:', err);
-    prettyPrintStunPacket(req);
+    console.log('ERROR processing binding request', err);
+
+    const res = stun.createBindingErrorResponse(msg, err);
+
+    udpSocket.send(res, rinfo.port, rinfo.address);
+
+    // debug
+    console.log('L <- R ', '='.repeat(23));
+    prettyPrintStunPacket(res, rinfo);
   }
-
-  // If these checks pass, the agent continues to process the request or
-  //  indication.  Any response generated by a server MUST include the
-  //  MESSAGE-INTEGRITY attribute, computed using the password utilized to
-  //  authenticate the request.  The response MUST NOT contain the USERNAME
-  //  attribute.
-
-  //  If any of the checks fail, a server MUST NOT include a MESSAGE-
-  //  INTEGRITY or USERNAME attribute in the error response.  This is
-  //  because, in these failure cases, the server cannot determine the
-  //  shared secret necessary to compute MESSAGE-INTEGRITY.
 };
 
 const handleUdpMessage = (msg, rinfo) => {
   console.log('handleUdpMessage()', rinfo);
 
   switch (msg.readUInt16BE(0, 2)) {
-    case 0x0001: // stun binding request
-      handleStunRequest(msg, rinfo);
+    case stun.MessageType16.BINDING_REQUEST:
+      handleStunBindingRequest(msg, rinfo);
       break;
 
-    case 0x0101: // stun binding response
+    case stun.MessageType16.BINDING_SUCCESS_RESPONSE:
+      console.log('STUN Binding Error Response');
+      console.log(hexy.hexy(msg, config.hexyFormat));
+      process.exit(0);
+      break;
+
+    case stun.MessageType16.BINDING_ERROR_RESPONSE:
+      console.log('STUN Binding Error Response');
+      console.log(hexy.hexy(msg, config.hexyFormat));
+      process.exit(0);
       break;
 
     default:
       console.log('Unsupported udp message');
       console.log(hexy.hexy(msg, config.hexyFormat));
+      process.exit(0);
       break;
   }
 };

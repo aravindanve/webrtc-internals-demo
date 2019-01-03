@@ -12,3 +12,6 @@ http://w3c.github.io/webrtc-pc/
 
 JavaScript Session Establishment Protocol
 https://tools.ietf.org/html/draft-ietf-rtcweb-jsep-24
+
+Implementing Interactive Connectivity Establishment (ICE) in Lite Mode
+https://tools.ietf.org/html/draft-rescorla-mmusic-ice-lite-00
