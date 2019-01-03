@@ -245,6 +245,14 @@ function getMsgHash(key, msg, end) {
     .digest();
 }
 
+function checkMessageIntegrity(key, msg, start) {
+  const msgHash = msg.slice(start, start + 20); // slice 20b from start of hash
+  const computedHash = getMsgHash(key, msg, start - 4);
+  // ^ compute hash for message from 0 to start - 4b (start of message-integrity)
+
+  return msgHash.toString() === computedHash.toString();
+}
+
 // warning: mutates original msg if end not provided
 function getMsgCrc32(msg, end) {
   const buf = Buffer.allocUnsafe(4);
@@ -314,7 +322,6 @@ function createBindingRequest(config) {
 function createBindingSuccessResponse(req, config, rinfo) {
   const transactionId = req.slice(8, 20);
   const key = config.key || saslprep(config.password);
-  console.log('HERE2', key);
   const [xorMappedAddrLength, xorMappedAddr] =
     lvXorMappedAddress(transactionId, rinfo);
 
@@ -390,10 +397,5 @@ module.exports = {
   createBindingRequest,
   createBindingSuccessResponse,
   createBindingErrorResponse,
-  checkMessageIntegrity(msg, key, hashOffset) {
-    const msgHash = msg.slice(hashOffset, hashOffset + 20);
-    const computedHash = getMsgHash(key, msg, hashOffset - 4);
-
-    return msgHash.toString() === computedHash.toString();
-  }
+  checkMessageIntegrity
 };
