@@ -107,7 +107,7 @@ const handleStunBindingRequest = (msg, rinfo) => {
 
   const packet = new stun.ReadablePacket(msg);
 
-  let ufrag; // `local:remote`
+  let ufrag; // [local, remote]
   let hashOffset;
 
   try {
@@ -146,7 +146,7 @@ const handleStunBindingRequest = (msg, rinfo) => {
     udpSocket.send(res, rinfo.port, rinfo.address);
 
     // debug
-    console.log('L <- R ', '='.repeat(23));
+    console.log('L <- R', '='.repeat(23));
     stunPacketPrettyPrint(res, rinfo);
 
   } catch (err) {
@@ -157,7 +157,7 @@ const handleStunBindingRequest = (msg, rinfo) => {
     udpSocket.send(res, rinfo.port, rinfo.address);
 
     // debug
-    console.log('L <- R ', '='.repeat(23));
+    console.log('L <- R', '='.repeat(23));
     stunPacketPrettyPrint(res, rinfo);
   }
 };
