@@ -9,7 +9,7 @@
   "author": "Aravindan Ve <aravindan.ve@outlook.com>",
   "license": "MIT",
   "dependencies": {
-    "fast-crc32c": "^1.0.4",
+    "buffer-crc32": "^0.2.13",
     "hexy": "^0.3.0",
     "saslprep": "^1.0.2",
     "sdp-transform": "^2.7.0",

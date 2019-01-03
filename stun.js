@@ -1,5 +1,5 @@
 const crypto = require('crypto');
-const crc32 = require('fast-crc32c');
+const crc32 = require('buffer-crc32');
 const saslprep = require('saslprep');
 
 const MAGIC_COOKIE_32 = 0x2112a442;
@@ -256,12 +256,12 @@ function getMsgCrc32(msg, end) {
   msg.writeUInt16BE(msg.length - 12, 2);
 
   // debug:
-  // console.log('CRC-32', crc32.calculate(msg));
-  // console.log('CRC-32 ^ 0x5354554e', crc32.calculate(msg) ^ 0x5354554e);
-  // console.log('CRC-32 ^ 0x5354554e UInt32', (crc32.calculate(msg) ^ 0x5354554e) >>> 0);
+  // console.log('CRC-32', crc32.unsigned(msg));
+  // console.log('CRC-32 ^ 0x5354554e', crc32.unsigned(msg) ^ 0x5354554e);
+  // console.log('CRC-32 ^ 0x5354554e UInt32', (crc32.unsigned(msg) ^ 0x5354554e) >>> 0);
 
   // write CRC-32 XOR'ed with 0x5354554e
-  buf.writeUInt32BE((crc32.calculate(msg) ^ 0x5354554e) >>> 0);
+  buf.writeUInt32BE((crc32.unsigned(msg) ^ 0x5354554e) >>> 0);
 
   return buf;
 }
