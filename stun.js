@@ -92,7 +92,7 @@ class ReadablePacket {
 
       offset += length;
 
-      if (remainder = length % 4) {
+      if (remainder = length & 0x03) {
         offset += 4 - remainder;
       }
     }
@@ -101,7 +101,7 @@ class ReadablePacket {
 
 function lvString(value, encoding = 'utf8') {
   const length = Buffer.byteLength(value, encoding);
-  const remainder = length % 4;
+  const remainder = length & 0x03;
   const padding = remainder ? 4 - remainder : 0;
   const lenBuffer = Buffer.allocUnsafe(2);
   const valBuffer = Buffer.alloc(length + padding);
