@@ -1,3 +1,3 @@
-# WebRTC Relay for NodeJS
+# WebRTC Internals Demo
 
-Work in progress. Intended for educational purposes, not for production.
+Intended for educational purposes, not for production.
